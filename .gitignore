@@ -3,4 +3,11 @@
 /secrets.yaml
 **/__pycache__
 /.vscode/**
+/fonts/**
+
+/*.yaml
+/*.yml
+!ce2727-32.yaml
+!ce2727-8266.yaml
+
 
