@@ -7,6 +7,7 @@ from esphome.const import (
     CONF_ADDRESS,
     CONF_FLOW_CONTROL_PIN,
     CONF_RECEIVE_TIMEOUT,
+    CONF_UPDATE_INTERVAL,
 )
 
 CODEOWNERS = ["@latonita"]
@@ -28,9 +29,9 @@ CONFIG_SCHEMA = cv.All(
             cv.Required(CONF_FLOW_CONTROL_PIN): pins.gpio_output_pin_schema,
             cv.Optional(CONF_ADDRESS, default=0): cv.int_range (min=0x0, max=0xffffffff),
             cv.Optional(CONF_RECEIVE_TIMEOUT, default="500ms"): cv.positive_time_period_milliseconds,
+            cv.Optional(CONF_UPDATE_INTERVAL, default="30s"): cv.update_interval,
         }
     )
-    .extend(cv.polling_component_schema("60s"))
     .extend(uart.UART_DEVICE_SCHEMA),
 )
 

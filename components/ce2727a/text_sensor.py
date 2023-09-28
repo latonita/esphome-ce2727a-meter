@@ -15,6 +15,7 @@ CONF_DATE = "date"
 CONF_TIME = "time"
 CONF_NETWORK_ADDRESS = "network_address"
 CONF_SERIAL_NR = "serial_nr"
+CONF_STATE = "state"
 
 
 TEXT_SENSORS = [
@@ -23,6 +24,7 @@ TEXT_SENSORS = [
     CONF_TIME,
     CONF_NETWORK_ADDRESS,
     CONF_SERIAL_NR,
+    CONF_STATE,
 ]
 
 CONFIG_SCHEMA = cv.Schema(
@@ -33,6 +35,7 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_TIME): text_sensor.text_sensor_schema(),
         cv.Optional(CONF_NETWORK_ADDRESS): text_sensor.text_sensor_schema(),
         cv.Optional(CONF_SERIAL_NR): text_sensor.text_sensor_schema(),
+        cv.Optional(CONF_STATE): text_sensor.text_sensor_schema(),
     }
 )
 

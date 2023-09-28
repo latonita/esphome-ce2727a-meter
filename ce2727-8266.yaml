@@ -1,5 +1,5 @@
 esphome:
-  name: ce2727a-esp8266
+  name: ce2727a-8266
 
 esp8266:
   board: nodemcuv2
@@ -8,9 +8,10 @@ logger:
   level: INFO
       
 external_components:
+#  source: https://github.com/latonita/esphome-ce2727a-meter
   source: 
     type: local
-    path: my_components
+    path: components
   components: [ce2727a]
 
 wifi:
@@ -73,7 +74,9 @@ text_sensor:
       name: "Network address"
     serial_nr: 
       name: "Serial number"
-
+    state: 
+      name: "Component state"
+      
 sensor:
   - platform: ce2727a
     active_power: 

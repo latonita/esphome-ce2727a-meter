@@ -1,6 +1,13 @@
 #include "esphome/core/log.h"
 #include "ce2727a.h"
 
+#define STATE_BOOTUP_WAIT "Waiting to boot up"
+#define STATE_METER_NOT_FOUND "Meter not found"
+#define STATE_METER_FOUND "Meter found"
+#define STATE_OK "OK"
+#define STATE_PARTIAL_OK "Read partial data"
+#define STATE_DATA_FAIL "Unable to read data"
+
 namespace esphome
 {
     namespace ce2727a
@@ -10,6 +17,8 @@ namespace esphome
 
         static constexpr size_t rxBufferSize = 64u;
         static std::array<uint8_t, rxBufferSize> rxBuffer;
+
+        constexpr uint8_t bootupWaitUpdate = 10; // avoid communications until properly booted
 
         static inline int bcd2dec(uint8_t hex)
         {
@@ -103,7 +112,7 @@ namespace esphome
         static_assert(sizeof(ce2727a_response_active_power_t) == 0x12, "Wrong structure size: ce2727a_response_active_power_t");
         static_assert(sizeof(ce2727a_response_consumed_energy_t) == 0x23, "Wrong structure size: ce2727a_response_consumed_energy_t");
 
-        float CE2727aComponent::get_setup_priority() const { return setup_priority::DATA; }
+        float CE2727aComponent::get_setup_priority() const { return setup_priority::AFTER_WIFI; }
 
         void CE2727aComponent::dump_config()
         {
@@ -111,6 +120,7 @@ namespace esphome
             LOG_UPDATE_INTERVAL(this);
             ESP_LOGCONFIG(TAG, "  Meter address requested: %u", this->requested_meter_address_);
             ESP_LOGCONFIG(TAG, "  Receive timeout: %.1fs", this->receive_timeout_ / 1e3f);
+            ESP_LOGCONFIG(TAG, "  Update interval: %.1fs", this->update_interval_ / 1e3f);
             LOG_PIN("  Flow Control Pin: ", this->flow_control_pin_);
             LOG_SENSOR("  ", "Active power", this->active_power_);
             LOG_SENSOR("  ", "Energy total", this->energy_total_);
@@ -129,6 +139,8 @@ namespace esphome
 
         void CE2727aComponent::setup()
         {
+            if (this->state_ != nullptr)
+                this->state_->publish_state(STATE_BOOTUP_WAIT);
         }
 
         void CE2727aComponent::loop()
@@ -137,44 +149,89 @@ namespace esphome
 
         void CE2727aComponent::update()
         {
-            if (millis() < 10 * 1000) // wait for everything to settle down
+            if (millis() < bootupWaitUpdate * 1000) // wait for everything to settle down
                 return;
 
-            flush();
-            get_meter_info();
-            flush();
-            get_date_time();
-            flush();
-            get_active_power();
-            flush();
-            get_energy_by_tariff();
+            if (!data_.meterFound)
+            {
+                flush();
+                if (get_meter_info())
+                {
+                    ESP_LOGI(TAG, "Found meter with s/n %u, we will be working with it from now on.", data_.networkAddress);
+                    data_.meterFound = true;
+                    requested_meter_address_ = data_.networkAddress;
 
-            if (this->network_address_ != nullptr)
-                this->network_address_->publish_state(to_string(data_.networkAddress));
-            if (this->serial_nr_ != nullptr)
-                this->serial_nr_->publish_state(to_string(data_.serialNumber));
+                    if (this->network_address_ != nullptr)
+                        this->network_address_->publish_state(to_string(data_.networkAddress));
+                    if (this->serial_nr_ != nullptr)
+                        this->serial_nr_->publish_state(to_string(data_.serialNumber));
+                    if (this->state_ != nullptr)
+                        this->state_->publish_state(STATE_METER_FOUND);
+                }
+                else
+                {
+                    if (this->state_ != nullptr)
+                        this->state_->publish_state(STATE_METER_NOT_FOUND);
+                }
+            }
+            
+            if (data_.meterFound)
+            {
+                uint8_t got = 0;
 
-            if (this->date_ != nullptr)
-                this->date_->publish_state(data_.dateStr);
-            if (this->time_ != nullptr)
-                this->time_->publish_state(data_.timeStr);
+                flush();
+                if (get_date_time())
+                {
+                    if (this->date_ != nullptr)
+                        this->date_->publish_state(data_.dateStr);
+                    if (this->time_ != nullptr)
+                        this->time_->publish_state(data_.timeStr);
+                    got |= 0001;
+                }
 
-            if (this->active_power_ != nullptr)
-                this->active_power_->publish_state(data_.activePower);
+                flush();
+                if (get_active_power())
+                {
+                    if (this->active_power_ != nullptr)
+                        this->active_power_->publish_state(data_.activePower);
+                    got |= 0010;
+                }
 
-            if (this->tariff_ != nullptr)
-                this->tariff_->publish_state(to_string(data_.energy.currentTariff));
+                flush();
+                if (get_energy_by_tariff())
+                {
+                    if (this->tariff_ != nullptr)
+                        this->tariff_->publish_state(to_string(data_.energy.currentTariff));
 
-            if (this->energy_total_ != nullptr)
-                this->energy_total_->publish_state(data_.energy.total);
-            if (this->energy_t1_ != nullptr)
-                this->energy_t1_->publish_state(data_.energy.t1);
-            if (this->energy_t2_ != nullptr)
-                this->energy_t2_->publish_state(data_.energy.t2);
-            if (this->energy_t3_ != nullptr)
-                this->energy_t3_->publish_state(data_.energy.t3);
-            if (this->energy_t4_ != nullptr)
-                this->energy_t4_->publish_state(data_.energy.t4);
+                    if (this->energy_total_ != nullptr)
+                        this->energy_total_->publish_state(data_.energy.total);
+                    if (this->energy_t1_ != nullptr)
+                        this->energy_t1_->publish_state(data_.energy.t1);
+                    if (this->energy_t2_ != nullptr)
+                        this->energy_t2_->publish_state(data_.energy.t2);
+                    if (this->energy_t3_ != nullptr)
+                        this->energy_t3_->publish_state(data_.energy.t3);
+                    if (this->energy_t4_ != nullptr)
+                        this->energy_t4_->publish_state(data_.energy.t4);
+                    got |= 0100;
+                }
+
+                if (got == 0111)
+                {
+                    data_.failure = false;
+                    data_.initialized = true;
+                    if (this->state_ != nullptr)
+                        this->state_->publish_state(STATE_OK);
+                }
+                else
+                {
+                    ESP_LOGI(TAG, "Got no or partial data %o", got);
+                    data_.failure = true;
+                    if (this->state_ != nullptr)
+                        this->state_->publish_state(
+                            (got == 0) ? STATE_DATA_FAIL : STATE_PARTIAL_OK);
+                }
+            }
         }
 
         void CE2727aComponent::send_enquiry_command(EnqCmd cmd)

@@ -28,6 +28,9 @@ namespace esphome
             uint32_t networkAddress{0};
             uint32_t properReads{0};
             uint32_t readErrors{0};
+            bool meterFound{false};
+            bool initialized{false};
+            bool failure{false};
         } InternalDataState;
 
         enum class EnqCmd : uint8_t
@@ -55,6 +58,7 @@ namespace esphome
             void set_time_text_sensor(text_sensor::TextSensor *time) { time_ = time; }
             void set_network_address_text_sensor(text_sensor::TextSensor *address) { network_address_ = address; }
             void set_serial_nr_text_sensor(text_sensor::TextSensor *serial_nr) { serial_nr_ = serial_nr; }
+            void set_state_text_sensor(text_sensor::TextSensor *state) { state_ = state; }
 
             void set_flow_control_pin(GPIOPin *flow_control_pin) { this->flow_control_pin_ = flow_control_pin; }
             void set_receive_timeout(uint32_t receive_timeout) { this->receive_timeout_ = receive_timeout; }
@@ -81,6 +85,7 @@ namespace esphome
             text_sensor::TextSensor *time_{nullptr};
             text_sensor::TextSensor *network_address_{nullptr};
             text_sensor::TextSensor *serial_nr_{nullptr};
+            text_sensor::TextSensor *state_{nullptr};
 
             GPIOPin *flow_control_pin_{nullptr};
             uint32_t receive_timeout_{0};
