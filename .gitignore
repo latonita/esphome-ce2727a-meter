@@ -7,7 +7,5 @@
 
 /*.yaml
 /*.yml
-!ce2727-32.yaml
-!ce2727-8266.yaml
-
-
+!example.ce2727-32.yaml
+!example.ce2727-8266.yaml

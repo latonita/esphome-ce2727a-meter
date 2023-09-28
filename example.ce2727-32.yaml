@@ -10,10 +10,7 @@ logger:
   level: INFO
       
 external_components:
-#  source: https://github.com/latonita/esphome-ce2727a-meter
-  source: 
-    type: local
-    path: components
+  source: github://latonita/esphome-ce2727a-meter@main
   components: [ce2727a]
 
 wifi:

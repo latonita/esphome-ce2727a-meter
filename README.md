@@ -37,7 +37,7 @@ https://github.com/latonita/esphome-ce2727a-meter/
 ce2727a:
     address: 4560123
 ```
-6. Примеры конфигураций в файлах `ce2727-8266.yaml` и `ce2727-32.yaml`.
+6. Примеры конфигураций в файлах [`example.ce2727-8266.yaml`](example.ce2727-8266.yaml) и [`example.ce2727-32.yaml`](example.ce2727-32.yaml). Секреты - из вашего стандартного файла `secrets.yaml`.
 
 ## Получаемые данные
 Компонент получает базовые данные со счетчика:
