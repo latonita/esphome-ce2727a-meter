@@ -8,6 +8,12 @@
 #define STATE_PARTIAL_OK "Read partial data"
 #define STATE_DATA_FAIL "Unable to read data"
 
+#define MASK_GOT_DATE_TIME 0b001
+#define MASK_GOT_ACTIVE_POWER 0b010
+#define MASK_GOT_ENERGY 0b100
+
+#define MESSAGE_CRC_IEC 0x0F47
+
 namespace esphome {
 namespace ce2727a {
 
@@ -124,8 +130,9 @@ void CE2727aComponent::dump_config() {
 }
 
 void CE2727aComponent::setup() {
-  if (this->state_ != nullptr)
-    this->state_->publish_state(STATE_BOOTUP_WAIT);
+  if (this->reading_state_ != nullptr) {
+    this->reading_state_->publish_state(STATE_BOOTUP_WAIT);
+  }
 
   this->set_timeout(1000, [this]() { this->fsm_state_ = State::IDLE; });
 }
@@ -147,28 +154,33 @@ void CE2727aComponent::loop() {
           this->data_.meterFound = true;
           requested_meter_address_ = this->data_.networkAddress;
 
-          if (this->network_address_ != nullptr)
+          if (this->network_address_ != nullptr) {
             this->network_address_->publish_state(to_string(this->data_.networkAddress));
-          if (this->serial_nr_ != nullptr)
+          }
+          if (this->serial_nr_ != nullptr) {
             this->serial_nr_->publish_state(to_string(this->data_.serialNumber));
-          if (this->state_ != nullptr)
-            this->state_->publish_state(STATE_METER_FOUND);
+          }
+          if (this->reading_state_ != nullptr) {
+            this->reading_state_->publish_state(STATE_METER_FOUND);
+          }
         } else {
-          if (this->state_ != nullptr)
-            this->state_->publish_state(STATE_METER_NOT_FOUND);
+          if (this->reading_state_ != nullptr) {
+            this->reading_state_->publish_state(STATE_METER_NOT_FOUND);
+          }
         }
       }
-      this->fsm_state_ = this->data_.meterFound ? State::GET_DATE_TIME : State::PUBLISH_DATA;
+      this->fsm_state_ = this->data_.meterFound ? State::GET_DATE_TIME : State::PUBLISH_INFO;
     } break;
-
     case State::GET_DATE_TIME: {
       flush();
       if (get_date_time()) {
-        if (this->date_ != nullptr)
+        if (this->date_ != nullptr) {
           this->date_->publish_state(this->data_.dateStr);
-        if (this->time_ != nullptr)
+        }
+        if (this->time_ != nullptr) {
           this->time_->publish_state(this->data_.timeStr);
-        this->data_.got |= 0001;
+        }
+        this->data_.got |= MASK_GOT_DATE_TIME;
       }
       this->fsm_state_ = State::GET_ACTIVE_POWER;
     } break;
@@ -176,9 +188,10 @@ void CE2727aComponent::loop() {
     case State::GET_ACTIVE_POWER: {
       flush();
       if (get_active_power()) {
-        if (this->active_power_ != nullptr)
+        if (this->active_power_ != nullptr) {
           this->active_power_->publish_state(this->data_.activePower);
-        this->data_.got |= 0010;
+        }
+        this->data_.got |= MASK_GOT_ACTIVE_POWER;
       }
       this->fsm_state_ = State::GET_ENERGY;
     } break;
@@ -186,35 +199,47 @@ void CE2727aComponent::loop() {
     case State::GET_ENERGY: {
       flush();
       if (get_energy_by_tariff()) {
-        if (this->tariff_ != nullptr)
-          this->tariff_->publish_state(to_string(this->data_.energy.currentTariff));
+        if (this->tariff_ != nullptr) {
+          char tariff_str[3];
+          tariff_str[0] = 'T';
+          tariff_str[1] = '0' + (this->data_.energy.currentTariff & 0b11);
+          tariff_str[2] = 0;
+          this->tariff_->publish_state(tariff_str);
+        }
 
-        if (this->energy_total_ != nullptr)
+        if (this->energy_total_ != nullptr) {
           this->energy_total_->publish_state(this->data_.energy.total);
-        if (this->energy_t1_ != nullptr)
+        }
+        if (this->energy_t1_ != nullptr) {
           this->energy_t1_->publish_state(this->data_.energy.t1);
-        if (this->energy_t2_ != nullptr)
+        }
+        if (this->energy_t2_ != nullptr) {
           this->energy_t2_->publish_state(this->data_.energy.t2);
-        if (this->energy_t3_ != nullptr)
+        }
+        if (this->energy_t3_ != nullptr) {
           this->energy_t3_->publish_state(this->data_.energy.t3);
-        if (this->energy_t4_ != nullptr)
+        }
+        if (this->energy_t4_ != nullptr) {
           this->energy_t4_->publish_state(this->data_.energy.t4);
-        this->data_.got |= 0100;
+        }
+        this->data_.got |= MASK_GOT_ENERGY;
       }
-      this->fsm_state_ = State::PUBLISH_DATA;
+      this->fsm_state_ = State::PUBLISH_INFO;
     } break;
 
-    case State::PUBLISH_DATA: {
-      if (this->data_.got == 0111) {
+    case State::PUBLISH_INFO: {
+      if (this->data_.got == 0b111) {
         this->data_.failure = false;
         this->data_.initialized = true;
-        if (this->state_ != nullptr)
-          this->state_->publish_state(STATE_OK);
+        if (this->reading_state_ != nullptr) {
+          this->reading_state_->publish_state(STATE_OK);
+        }
       } else {
         ESP_LOGI(TAG, "Got no or partial data %o", this->data_.got);
         this->data_.failure = true;
-        if (this->state_ != nullptr)
-          this->state_->publish_state((this->data_.got == 0) ? STATE_DATA_FAIL : STATE_PARTIAL_OK);
+        if (this->reading_state_ != nullptr) {
+          this->reading_state_->publish_state((this->data_.got == 0) ? STATE_DATA_FAIL : STATE_PARTIAL_OK);
+        }
       }
       ESP_LOGD(TAG, "Data errors %d, proper reads %d", this->data_.readErrors, this->data_.properReads);
       this->fsm_state_ = State::IDLE;
@@ -271,7 +296,7 @@ bool CE2727aComponent::receive_proper_response(uint16_t expectedSize) {
     ESP_LOGV(TAG, "Got some bytesRead %d", bytesRead);
   }
   ESP_LOGV(TAG, "Bytes expected/read %d/%d", expectedSize, bytesRead);
-  ESP_LOGV(TAG, "Got reponse: %s", format_hex_pretty((const uint8_t *) rxBuffer.data(), bytesRead).c_str());
+  ESP_LOGVV(TAG, "Got reponse: %s", format_hex_pretty((const uint8_t *) rxBuffer.data(), bytesRead).c_str());
 
   if (bytesRead != expectedSize) {
     ESP_LOGE(TAG, "receiveProperResponse wrong size");
@@ -280,7 +305,7 @@ bool CE2727aComponent::receive_proper_response(uint16_t expectedSize) {
   };
 
   // CRC of message + its CRC = 0x0F47
-  if (crc_16_iec(rxBuffer.data(), expectedSize) != 0x0F47) {
+  if (crc_16_iec(rxBuffer.data(), expectedSize) != MESSAGE_CRC_IEC) {
     ESP_LOGE(TAG, "receiveProperResponse CRC failed");
     this->data_.readErrors++;
     return false;
@@ -320,7 +345,7 @@ bool CE2727aComponent::get_date_time() {
 
   snprintf(this->data_.timeStr, sizeof(this->data_.timeStr), "%02d:%02d:%02d", bcd2dec(res.hour), bcd2dec(res.minute),
            bcd2dec(res.second));
-  snprintf(this->data_.dateStr, sizeof(this->data_.dateStr), "%02d/%02d/%02d", bcd2dec(res.day), bcd2dec(res.month),
+  snprintf(this->data_.dateStr, sizeof(this->data_.dateStr), "%02d/%02d/20%02d", bcd2dec(res.day), bcd2dec(res.month),
            bcd2dec(res.year));
 
   ESP_LOGI(TAG, "get_date_time() Date %s Time %s", this->data_.dateStr, this->data_.timeStr);

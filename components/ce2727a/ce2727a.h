@@ -19,7 +19,7 @@ struct InternalDataState {
   } energy;
   uint32_t activePower{0};
   char timeStr[9]{0};  // "23:59:99"
-  char dateStr[9]{0};  // "30/08/23"
+  char dateStr[11]{0};  // "30/08/2023"
   uint32_t serialNumber{0};
   uint32_t networkAddress{0};
   uint32_t properReads{0};
@@ -36,19 +36,19 @@ class CE2727aComponent : public PollingComponent, public uart::UARTDevice {
  public:
   CE2727aComponent() = default;
 
-  void set_active_power_sensor(sensor::Sensor *active_power) { active_power_ = active_power; }
-  void set_energy_total_sensor(sensor::Sensor *energy_total) { energy_total_ = energy_total; }
-  void set_energy_t1_sensor(sensor::Sensor *energy_t1) { energy_t1_ = energy_t1; }
-  void set_energy_t2_sensor(sensor::Sensor *energy_t2) { energy_t2_ = energy_t2; }
-  void set_energy_t3_sensor(sensor::Sensor *energy_t3) { energy_t3_ = energy_t3; }
-  void set_energy_t4_sensor(sensor::Sensor *energy_t4) { energy_t4_ = energy_t4; }
+  void set_active_power_sensor(sensor::Sensor *active_power) { this->active_power_ = active_power; }
+  void set_energy_total_sensor(sensor::Sensor *energy_total) { this->energy_total_ = energy_total; }
+  void set_energy_t1_sensor(sensor::Sensor *energy_t1) { this->energy_t1_ = energy_t1; }
+  void set_energy_t2_sensor(sensor::Sensor *energy_t2) { this->energy_t2_ = energy_t2; }
+  void set_energy_t3_sensor(sensor::Sensor *energy_t3) { this->energy_t3_ = energy_t3; }
+  void set_energy_t4_sensor(sensor::Sensor *energy_t4) { this->energy_t4_ = energy_t4; }
 
-  void set_electricity_tariff_text_sensor(text_sensor::TextSensor *tariff) { tariff_ = tariff; }
-  void set_date_text_sensor(text_sensor::TextSensor *date) { date_ = date; }
-  void set_time_text_sensor(text_sensor::TextSensor *time) { time_ = time; }
-  void set_network_address_text_sensor(text_sensor::TextSensor *address) { network_address_ = address; }
-  void set_serial_nr_text_sensor(text_sensor::TextSensor *serial_nr) { serial_nr_ = serial_nr; }
-  void set_state_text_sensor(text_sensor::TextSensor *state) { state_ = state; }
+  void set_electricity_tariff_text_sensor(text_sensor::TextSensor *tariff) { this->tariff_ = tariff; }
+  void set_date_text_sensor(text_sensor::TextSensor *date) { this->date_ = date; }
+  void set_time_text_sensor(text_sensor::TextSensor *time) { this->time_ = time; }
+  void set_network_address_text_sensor(text_sensor::TextSensor *address) { this->network_address_ = address; }
+  void set_serial_nr_text_sensor(text_sensor::TextSensor *serial_nr) { this->serial_nr_ = serial_nr; }
+  void set_state_text_sensor(text_sensor::TextSensor *state) { this->reading_state_ = state; }
 
   void set_flow_control_pin(GPIOPin *flow_control_pin) { this->flow_control_pin_ = flow_control_pin; }
   void set_receive_timeout(uint32_t receive_timeout) { this->receive_timeout_ = receive_timeout; }
@@ -75,7 +75,7 @@ class CE2727aComponent : public PollingComponent, public uart::UARTDevice {
   text_sensor::TextSensor *time_{nullptr};
   text_sensor::TextSensor *network_address_{nullptr};
   text_sensor::TextSensor *serial_nr_{nullptr};
-  text_sensor::TextSensor *state_{nullptr};
+  text_sensor::TextSensor *reading_state_{nullptr};
 
   GPIOPin *flow_control_pin_{nullptr};
   uint32_t receive_timeout_{0};
@@ -90,7 +90,7 @@ class CE2727aComponent : public PollingComponent, public uart::UARTDevice {
     GET_DATE_TIME,
     GET_ACTIVE_POWER,
     GET_ENERGY,
-    PUBLISH_DATA,
+    PUBLISH_INFO,
   } fsm_state_{State::NOT_INITIALIZED};
 
   void send_enquiry_command(EnqCmd cmd);
