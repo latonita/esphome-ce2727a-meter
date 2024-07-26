@@ -28,6 +28,7 @@ struct InternalDataState {
   bool initialized{false};
   bool failure{false};
   uint8_t got{0};
+  uint32_t lastGoodRead_ms{0};
 };
 
 enum class EnqCmd : uint8_t { Info = 0x00, DateTime = 0x01, ActivePower = 0x02, ConsumedEnergy = 0x03 };

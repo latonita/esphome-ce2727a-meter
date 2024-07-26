@@ -1,3 +1,4 @@
+#include "esphome/core/application.h"
 #include "esphome/core/log.h"
 #include "ce2727a.h"
 
@@ -143,8 +144,14 @@ void CE2727aComponent::loop() {
 
   switch (this->fsm_state_) {
     case State::NOT_INITIALIZED:
-    case State::IDLE:
-      break;
+    case State::IDLE: {
+      uint32_t now = millis();
+      if (now - this->data_.lastGoodRead_ms > 5 * 60 * 1000) {
+        ESP_LOGE(TAG, "Rebooting due to no good reads from the meter for 5 minutes...");
+        delay(1000);
+        App.reboot();
+      }
+    } break;
 
     case State::GET_METER_INFO: {
       if (!this->data_.meterFound) {
@@ -234,6 +241,7 @@ void CE2727aComponent::loop() {
         if (this->reading_state_ != nullptr) {
           this->reading_state_->publish_state(STATE_OK);
         }
+        this->data_.lastGoodRead_ms = millis();
       } else {
         ESP_LOGI(TAG, "Got no or partial data %o", this->data_.got);
         this->data_.failure = true;
@@ -257,61 +265,6 @@ void CE2727aComponent::update() {
   } else {
     ESP_LOGV(TAG, "Update: Component not ready yet");
   }
-}
-
-void CE2727aComponent::send_enquiry_command(EnqCmd cmd) {
-  if (this->flow_control_pin_ != nullptr)
-    this->flow_control_pin_->digital_write(true);
-
-  txBuffer.header.two = 0x02;  // magic
-  txBuffer.header.length = sizeof(ce2727a_request_command_t);
-  txBuffer.header.address = this->requested_meter_address_;
-  txBuffer.header.password = 0x0;
-  txBuffer.header.com = static_cast<uint8_t>(ComType::Enq);
-  txBuffer.header.id = static_cast<uint8_t>(cmd);
-  txBuffer.crc16 =
-      crc_16_iec((const uint8_t *) &txBuffer, sizeof(ce2727a_request_command_t) - 2);  // minus 2 bytes for CRC
-
-  write_array((const uint8_t *) &txBuffer, sizeof(ce2727a_request_command_t));
-
-  if (this->flow_control_pin_ != nullptr)
-    this->flow_control_pin_->digital_write(false);
-}
-
-bool CE2727aComponent::receive_proper_response(uint16_t expectedSize) {
-  auto stopWaiting = millis() + this->receive_timeout_;
-  uint16_t bytesRead = 0;
-  int currentByte = 0;
-  ESP_LOGV(TAG, "Expecting %d bytes", expectedSize);
-  while ((bytesRead < expectedSize) && (millis() < stopWaiting)) {
-    while (available() > 0 && bytesRead < expectedSize) {
-      currentByte = read();
-      if (currentByte >= 0) {
-        rxBuffer[bytesRead++] = (uint8_t) currentByte;
-      }
-      yield();
-    }
-    delay(5);
-    yield();
-    ESP_LOGV(TAG, "Got some bytesRead %d", bytesRead);
-  }
-  ESP_LOGV(TAG, "Bytes expected/read %d/%d", expectedSize, bytesRead);
-  ESP_LOGVV(TAG, "Got reponse: %s", format_hex_pretty((const uint8_t *) rxBuffer.data(), bytesRead).c_str());
-
-  if (bytesRead != expectedSize) {
-    ESP_LOGE(TAG, "receiveProperResponse wrong size");
-    this->data_.readErrors++;
-    return false;
-  };
-
-  // CRC of message + its CRC = 0x0F47
-  if (crc_16_iec(rxBuffer.data(), expectedSize) != MESSAGE_CRC_IEC) {
-    ESP_LOGE(TAG, "receiveProperResponse CRC failed");
-    this->data_.readErrors++;
-    return false;
-  }
-  this->data_.properReads++;
-  return true;
 }
 
 bool CE2727aComponent::get_meter_info() {
@@ -387,6 +340,60 @@ bool CE2727aComponent::get_energy_by_tariff() {
   return true;
 }
 
+void CE2727aComponent::send_enquiry_command(EnqCmd cmd) {
+  if (this->flow_control_pin_ != nullptr)
+    this->flow_control_pin_->digital_write(true);
+
+  txBuffer.header.two = 0x02;  // magic
+  txBuffer.header.length = sizeof(ce2727a_request_command_t);
+  txBuffer.header.address = this->requested_meter_address_;
+  txBuffer.header.password = 0x0;
+  txBuffer.header.com = static_cast<uint8_t>(ComType::Enq);
+  txBuffer.header.id = static_cast<uint8_t>(cmd);
+  txBuffer.crc16 =
+      crc_16_iec((const uint8_t *) &txBuffer, sizeof(ce2727a_request_command_t) - 2);  // minus 2 bytes for CRC
+
+  write_array((const uint8_t *) &txBuffer, sizeof(ce2727a_request_command_t));
+
+  if (this->flow_control_pin_ != nullptr)
+    this->flow_control_pin_->digital_write(false);
+}
+
+bool CE2727aComponent::receive_proper_response(const uint16_t expectedSize) {
+  auto stopWaiting = millis() + this->receive_timeout_;
+  uint16_t bytesRead = 0;
+  int currentByte = 0;
+  ESP_LOGV(TAG, "Expecting %d bytes", expectedSize);
+  while ((bytesRead < expectedSize) && (millis() < stopWaiting)) {
+    while (available() > 0 && bytesRead < expectedSize) {
+      currentByte = read();
+      if (currentByte >= 0) {
+        rxBuffer[bytesRead++] = (uint8_t) currentByte;
+      }
+      yield();
+    }
+    delay(5);
+    yield();
+    ESP_LOGV(TAG, "Got some bytesRead %d", bytesRead);
+  }
+  ESP_LOGV(TAG, "Bytes expected/read %d/%d", expectedSize, bytesRead);
+  ESP_LOGVV(TAG, "Got reponse: %s", format_hex_pretty((const uint8_t *) rxBuffer.data(), bytesRead).c_str());
+
+  if (bytesRead != expectedSize) {
+    ESP_LOGE(TAG, "receiveProperResponse wrong size");
+    this->data_.readErrors++;
+    return false;
+  };
+
+  // CRC of message + its CRC = 0x0F47
+  if (crc_16_iec(rxBuffer.data(), expectedSize) != MESSAGE_CRC_IEC) {
+    ESP_LOGE(TAG, "receiveProperResponse CRC failed");
+    this->data_.readErrors++;
+    return false;
+  }
+  this->data_.properReads++;
+  return true;
+}
 //---------------------------------------------------------------------------------------
 //  The standard 16-bit CRC polynomial specified in ISO/IEC 3309 is used.
 //             16   12   5
