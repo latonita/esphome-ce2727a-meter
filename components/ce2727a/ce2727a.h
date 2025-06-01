@@ -84,23 +84,37 @@ class CE2727aComponent : public PollingComponent, public uart::UARTDevice {
 
   InternalDataState data_{};
 
+  // Tracker for the current command and response
+  struct {
+    EnqCmd current_cmd{};
+    uint16_t expected_size{0};
+    uint32_t start_time{0};
+    uint16_t bytes_read{0};
+  } request_tracker_{};
+
   enum class State : uint8_t {
     NOT_INITIALIZED,
     IDLE,
+    WAITING_FOR_RESPONSE,
     GET_METER_INFO,
     GET_DATE_TIME,
     GET_ACTIVE_POWER,
     GET_ENERGY,
     PUBLISH_INFO,
   } fsm_state_{State::NOT_INITIALIZED};
+  
+  // Next state to transition to after response is received
+  State next_state_{State::IDLE};
 
   void send_enquiry_command(EnqCmd cmd);
-  bool receive_proper_response(uint16_t expectedSize);
+  void start_async_request(EnqCmd cmd, uint16_t expected_size, State next_state);
+  bool process_response();
+  bool process_received_data();
 
-  bool get_meter_info();
-  bool get_date_time();
-  bool get_active_power();
-  bool get_energy_by_tariff();
+  void get_meter_info();
+  void get_date_time();
+  void get_active_power();
+  void get_energy_by_tariff();
 
   uint16_t crc_16_iec(const uint8_t *buffer, uint16_t len);
 };
