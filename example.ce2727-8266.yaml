@@ -17,38 +17,55 @@ wifi:
   reboot_timeout: 5min
   power_save_mode: NONE
 
-mqtt:
-  broker: !secret mqtt_broker
-  discovery: False
-
 api:
   password: !secret api_password
 
-ota:
-  password: !secret ota_password
-  
-output:
-  - platform: gpio
-    id: led
-    pin: GPIO04
-    inverted: true
- 
-light:
-  - platform: binary
-    id: in_led
-    output: led
-    name: Test LED
+mqtt:
+  broker: !secret mqtt_broker
+  discovery: False # True if only MQTT w/o API
 
-web_server:
-  port: 80
-  auth:
-    username: !secret web_user
-    password: !secret web_password
+ota:
+  platform: esphome
+  password: !secret ota_password
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Europe/Moscow
+    servers:
+     - 0.pool.ntp.org
+     - 1.pool.ntp.org
+     - 2.pool.ntp.org
+
+status_led:
+  pin: GPIO13
+
+button:
+  - platform: restart
+    id: restart_button
+    name: "Restart"
+
+  - platform: safe_mode
+    name: "Restart (Safe Mode)"
+
+interval:
+  # перезагрузка раз в сутки, на всякий случай полезно
+  - interval: 24h
+    startup_delay: 24h
+    then:
+      - button.press: restart_button
+
+  # синхронизация времени раз в день, 5 мин задержка, чтобы wifi/sntp успел подключиться и синхронизироваться
+  - interval: 24h
+    startup_delay: 5min
+    then:
+      - lambda: |-
+          id(my_meter).sync_device_time();
 
 uart:
   id: rs485
-  rx_pin: 5
-  tx_pin: 4
+  rx_pin: GPIO05
+  tx_pin: GPIO04
   baud_rate: 9600
   data_bits: 8
   parity: EVEN
@@ -56,52 +73,88 @@ uart:
   rx_buffer_size: 256
   
 ce2727a:
-  flow_control_pin: 15
+  id: my_meter
+  flow_control_pin: GPIO15
   receive_timeout: 300ms
+  time_id: sntp_time
+
 
 text_sensor:
   - platform: ce2727a
-    electricity_tariff: 
-      name: "Active tariff"
+    tariff: 
+      name: "Current Tariff"
     date:
       name: "Date"
     time:
       name: "Time"
-    network_address:
-      name: "Network address"
+  # network_address:
+    #   name: "Network address"
     serial_nr: 
       name: "Serial number"
-    state: 
-      name: "Component state"
-      
+    reading_state: 
+      name: "Reading state"
+
+  - platform: debug
+    reset_reason:
+      name: "Reset Reason"
+
+  - platform: wifi_info
+    ip_address:
+      name: IP Address
+
+  - platform: template
+    name: "Time (SNTP)"
+    entity_category: "diagnostic"
+    lambda: |-
+      auto time_text = id(sntp_time).now().strftime("%H:%M:%S");
+      return { time_text };
+
+  - platform: template
+    entity_category: "diagnostic"
+    name: "Date (SNTP)"
+    lambda: |-
+      auto time_text = id(sntp_time).now().strftime("%d/%m/%Y");
+      return { time_text };
+
 sensor:
   - platform: ce2727a
     active_power: 
-      name: "Active power"
+      name: "Active Power"
     energy_total:
-      name: "Energy consumed total"  
+      name: "Energy Total"  
+      accuracy_decimals: 3
+      unit_of_measurement: kWh
+      filters:
+        - multiply: 0.001
     energy_t1:
-      name: "Energy consumed tariff 1"
+      name: "Energy T1"
+      accuracy_decimals: 3
+      unit_of_measurement: kWh
+      filters:
+        - multiply: 0.001
     energy_t2:
-      name: "Energy consumed tariff 2"
-    energy_t3:
-      name: "Energy consumed tariff 3"
-    energy_t4:
-      name: "Energy consumed tariff 4"
+      name: "Energy T2"
+      accuracy_decimals: 3
+      unit_of_measurement: kWh
+      filters:
+        - multiply: 0.001
 
-#  - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
-#    name: "WiFi Signal dB"
-#    id: wifi_signal_db
-#    update_interval: 60s
-#    entity_category: "diagnostic"
-#
-#  - platform: copy # Reports the WiFi signal strength in %
-#    source_id: wifi_signal_db
-#    name: "WiFi Signal Percent"
-#    filters:
-#      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
-#    unit_of_measurement: "Signal %"
-#    entity_category: "diagnostic"
+  - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
+    name: "WiFi Signal dB"
+    id: wifi_signal_db
+    update_interval: 60s
+    entity_category: "diagnostic"
+
 
   - platform: uptime
-    name: Uptime sensor
+    name: Uptime
+
+  - platform: debug
+    free:
+      name: "Heap Free"
+    block:
+      name: "Heap Max Block"
+    loop_time:
+      name: "Loop Time"
+
+debug:
