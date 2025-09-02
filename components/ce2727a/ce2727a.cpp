@@ -198,7 +198,7 @@ void CE2727aComponent::loop() {
 
     case State::CORRECT_DATE_TIME: {
       this->log_state_();
-      this->next_state_ = State::GET_ACTIVE_POWER;
+      this->state_ = State::GET_ACTIVE_POWER;
 
       if (this->time_source_ == nullptr || !this->got_time_correction_request_ ||
           !(this->data_.got & MASK_GOT_DATE_TIME))
@@ -264,6 +264,7 @@ void CE2727aComponent::loop() {
 
     case State::PUBLISH_INFO: {
       this->log_state_();
+      ESP_LOGD(TAG, "Publishing. mask=%d", this->data_.got);
       // Update status text sensor based on the data we were able to collect
       if (this->data_.got == (MASK_GOT_DATE_TIME | MASK_GOT_ACTIVE_POWER | MASK_GOT_ENERGY)) {
         this->data_.failure = false;
