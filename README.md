@@ -4,7 +4,8 @@
 [Энергомера CE](https://github.com/latonita/esphome-energomera-ce) •
 [СПб ЗИП ЦЭ2727А](https://github.com/latonita/esphome-ce2727a-meter) •
 [Ленэлектро ЛЕ-2](https://github.com/latonita/esphome-le2-meter) •
-[Пульсар-М](https://github.com/latonita/esphome-pulsar-m)
+[Пульсар-М](https://github.com/latonita/esphome-pulsar-m) •
+[Энергомера BLE](https://github.com/latonita/esphome-energomera-ble)
 
 # ESPHome компонент для подключения счетчиков электроэнергии СПбЗиП ЦЭ 2727А и ЦЭ 2726А по RS-485
 https://github.com/latonita/esphome-ce2727a-meter/
